@@ -1,68 +1,62 @@
+
 # ADR-001: IAM Access Strategy for ECS Applications
 
-**Status:** Accepted (initial lab design)
+- **Status:** Accepted (initial lab design)
+- **Date:** 2026-11-10
 
-**Date:** 2026-11-10
+## Context
 
-## 1. Context
+An enterprise document-processing application running on Amazon ECS
+requires access to confidential documents stored in Amazon S3.
 
-We are designing an enterprise document-processing application running on Amazon ECS. The application needs to retrieve confidential documents stored in Amazon S3.
-
-The architecture must satisfy the following requirements:
-
-- Restrict application access to required S3 objects.
-- Avoid storing permanent AWS access keys in application code.
-- Prevent unnecessary developer access to production documents.
+The design must:
+- Restrict access to necessary S3 objects.
+- Avoid long-lived AWS credentials.
+- Prevent unnecessary developer access.
 - Support auditing of document access.
 
-## 2. Decision
+## Decision
 
-We will use an **IAM task role for Amazon ECS**, with an IAM policy granting only the required S3 read permissions.
+Use an IAM task role for the ECS application with least-privilege
+permissions scoped to the required S3 objects.
 
-The ECS task will use temporary AWS credentials associated with the task role.
+ECS provides temporary AWS credentials to running tasks.
+No permanent credentials will be stored in application code.
 
-The application will not store permanent AWS credentials in source code or configuration files.
+## Alternatives Considered
 
-## 3. Alternatives Considered
+| Option | Decision | Reason |
+|---|---|---|
+| IAM user access keys | Rejected | Long-lived credential management |
+| ECS task role | Selected | Temporary credentials and scoped permissions |
+| AdministratorAccess | Rejected | Excessive permissions |
+| Public S3 bucket | Rejected | Confidentiality risk |
 
-### Option A: IAM User with Access Keys
+## Consequences
 
-Rejected because long-lived credentials require secure storage, rotation, and lifecycle management.
+### Benefits
+- Reduces credential exposure.
+- Enforces least-privilege access.
+- Supports temporary credentials.
+- Enables auditing when CloudTrail S3 data events are configured.
 
-### Option B: IAM Task Role
+### Trade-offs
+- IAM policies require maintenance.
+- Permissions must evolve with application requirements.
+- Application-level vulnerabilities can still misuse granted permissions.
 
-Selected because it supports temporary credentials and granular access permissions without requiring embedded access keys.
+## Implementation Notes
 
-### Option C: AdministratorAccess
-
-Rejected because unrestricted permissions violate least-privilege principles.
-
-### Option D: Public S3 Bucket
-
-Rejected because making confidential documents publicly readable creates unacceptable exposure risks.
-
-## 4. Consequences and Trade-offs
-
-**Benefits:**
-- Reduced risk of credential exposure.
-- Permissions scoped to required S3 operations.
-- AWS-managed temporary credential delivery.
-- Access can be audited through CloudTrail when relevant S3 data events are enabled.
-
-**Trade-offs:**
-- IAM policies and role trust relationships require configuration and maintenance.
-- Permissions must be updated when application responsibilities change.
-- Temporary credentials do not eliminate application vulnerabilities or unauthorized use of the role.
-
-## 5. Implementation Considerations
-
-- Create an ECS task role with the appropriate ECS task-role trust relationship.
-- Grant `s3:GetObject` only for the necessary object ARNs.
+- Configure an ECS task role and appropriate trust policy.
+- Grant `s3:GetObject` to the required object ARNs.
 - Keep S3 Block Public Access enabled.
-- Separate application task permissions from ECS task execution permissions.
-- Configure CloudTrail S3 data events for required audit coverage.
-- Use separate roles and policies for development and production environments.
+- Separate task roles from task execution roles.
+- Enable CloudTrail S3 data events when object-level auditing is required.
+- Use separate development and production permissions.
 
-## 6. Review Trigger
+## Review Triggers
 
-Revisit this decision if the application moves to another compute service, requires new AWS permissions, or introduces additional security and compliance requirements.
+Revisit this decision when:
+- Migrating to a different compute platform.
+- Introducing additional AWS services.
+- Changing security or compliance requirements.
